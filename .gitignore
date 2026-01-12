@@ -6,9 +6,9 @@ __pycache__/
 # Environments
 .env
 .venv
-env/
+# env/  <-- Commented out because it conflicts with source code folder 'env'
 venv/
-ENV/
+# ENV/  <-- Commented out because it conflicts with source code folder 'env' on Windows
 env.bak/
 venv.bak/
 
