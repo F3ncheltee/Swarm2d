@@ -1,0 +1,26 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment. Note: In this project 'env' is a source folder, not a virtual env.
+# env/
+
+# Logs
+logs/
+*.log
+test_output.log
+
+# Profiling files
+*.prof
+training_cProfile_epinterrupted.prof
+
+# Trained models (if large)
+# If you want to share your models, consider using a service like Git LFS
+# or hosting them separately and documenting how to download them.
+models/
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

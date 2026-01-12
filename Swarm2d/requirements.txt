@@ -1,0 +1,11 @@
+numpy
+torch
+torch_geometric
+PyQt6
+pyqtgraph
+pybullet
+gymnasium
+pygame
+scipy
+tqdm
+matplotlib

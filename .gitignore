@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+.cursor/
+
+# Training Results & Logs
+results/
+logs/
+checkpoints*/
+training_log_*.csv
+*.pt
+*.pth
+*.pkl
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.gif
+*.prof
+*.json
+
+# Specific Output Directories
+ctde_checkpoints/
+rl_training_results_*/
+foveated_visualization_output/
+observation_visuals/
+observation_visuals_gif_frames/
+old_runs_backup/
+multi_team_results/
+experiments/
