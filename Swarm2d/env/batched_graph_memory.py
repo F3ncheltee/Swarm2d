@@ -38,7 +38,6 @@ def _tensor_to_str(tensor: torch.Tensor, top_k=3):
 
 
 # This will be the new home for our batched memory manager.
-# I am starting with the basic structure and will build it out carefully.
 
 class BatchedPersistentGraphMemory:
     """
@@ -146,7 +145,6 @@ class BatchedPersistentGraphMemory:
             obs_update_indices: Corresponding indices in observations for the matched nodes.
             obs_add_indices: Indices in observations for nodes that are new and need to be added.
         """
-        # FUNDAMENTAL FIX: Replace O(N*M) torch.isin with O(N log N) sort-merge algorithm
         
         # Sort both key arrays
         sorted_mem_keys, sorted_mem_indices = torch.sort(mem_keys)
@@ -174,14 +172,14 @@ class BatchedPersistentGraphMemory:
         """
         The core method. Updates the memory for all agents in a single batched call.
         """
-        # --- NEW EGO DEBUG ---
+        # --- EGO DEBUG ---
         if self.debug_mode and current_step < 5:
             agent_0_batch_mask = (obs_batch.batch == 0)
             if torch.any(agent_0_batch_mask):
                 agent_0_features = obs_batch.x[agent_0_batch_mask]
                 agent_0_ego_sum = torch.sum(agent_0_features[:, self.is_ego_idx]).item()
                 print(f"[TRACEPOINT 2 @ Step {current_step}, MemManager.update] Obs received. Ego nodes in 'x': {agent_0_ego_sum}.")
-        # --- END NEW EGO DEBUG ---
+        # --- END EGO DEBUG ---
 
         # --- Pre-computation: Get env_id from features if not present ---
         # This makes the function more robust.
@@ -242,10 +240,6 @@ class BatchedPersistentGraphMemory:
             new_features = torch.zeros((num_added_nodes, self.d_feat_mem), device=self.device)
             new_features[:, :self.d_feat_in] = obs_batch.x[new_obs_indices]
 
-            # CRITICAL FIX: DO NOT explicitly set 'is_ego' to 0. Preserve it from the observation.
-            # The line below was the source of the memory bug.
-            # new_features[:, self.is_ego_idx] = 0.0
-
             new_features[:, self.last_seen_idx] = current_step
             new_features[:, self.status_idx] = 0.0 # 0.0 for normal status
 
@@ -266,12 +260,6 @@ class BatchedPersistentGraphMemory:
                 self.mem_radii = torch.cat([placeholder_radii, obs_batch.radii[new_obs_indices]], dim=0)
 
 
-        # --- Step 6: REMOVED Pruning ---
-
-        # --- Step 7: REMOVED ---
-        # The expensive sorting and pointer rebuilding step has been removed.
-        # The optimized `get_graph_batch` does not require nodes to be contiguous.
-
     def get_graph_batch(self,
                         fovea_agent_positions: torch.Tensor,
                         fovea_agent_radii: torch.Tensor,
@@ -288,7 +276,7 @@ class BatchedPersistentGraphMemory:
                         max_steps: int = 1000,
                         debug_mode: bool = False) -> Optional[Batch]:
         """
-        (V6 - TRUE BATCHING) Eliminates the per-agent loop entirely by processing
+        Eliminates the per-agent loop entirely by processing
         all agents simultaneously in a unified graph structure.
         """
         self.debug_mode = debug_mode
@@ -330,7 +318,7 @@ class BatchedPersistentGraphMemory:
         )
 
         # =================================================================
-        # TRUE BATCHED PROCESSING - Process all agents simultaneously
+        # BATCHED PROCESSING - Process all agents simultaneously
         # =================================================================
         
         # Step 1: Batch all live foveal nodes
@@ -379,7 +367,7 @@ class BatchedPersistentGraphMemory:
             agent_mem_mask = self.mem_agent_idx == i
             agent_mem_indices = torch.where(agent_mem_mask)[0]
             
-            # Filter out duplicates (OPTIMIZED: use fast_isin instead of torch.isin)
+            # Filter out duplicates
             if agent_mem_indices.numel() > 0 and live_fovea_env_ids.numel() > 0:
                 agent_mem_env_ids = self.mem_env_id[agent_mem_indices]
                 is_duplicate_mask = self._fast_isin(agent_mem_env_ids, live_fovea_env_ids)
@@ -897,7 +885,6 @@ class BatchedPersistentGraphMemory:
 
             # The global de-duplication happens *after* clustering is called.
             # To prevent live foveal nodes from being clustered, we must de-duplicate here.
-            # OPTIMIZED: use fast_isin instead of torch.isin
             if periphery_node_indices.numel() > 0:
                 live_fovea_graph = live_fovea_graph_list[i]
                 if live_fovea_graph.num_nodes > 0:
@@ -906,7 +893,6 @@ class BatchedPersistentGraphMemory:
                     
                     is_duplicate_mask = self._fast_isin(periphery_env_ids, live_env_ids)
                     periphery_node_indices = periphery_node_indices[~is_duplicate_mask]
-            # --- END FIX ---
 
             if periphery_node_indices.numel() == 0:
                 empty_graph = Data(
@@ -926,14 +912,14 @@ class BatchedPersistentGraphMemory:
             else:
                 periphery_radii = torch.zeros(periphery_pos.shape[0], device=self.device)
             
-            # --- V5: EXCLUSION RADIUS & SMOOTHER SCALING ---
+            # --- EXCLUSION RADIUS & SMOOTHER SCALING ---
             dists = torch.norm(periphery_pos - agent_pos, dim=1)
             
             # 1. Apply an exclusion radius where no clustering occurs.
             exclusion_radius = agent_fovea_radii[i] * cluster_exclusion_radius_factor
             clusterable_mask = dists > exclusion_radius
             
-            # --- V10: LEVEL OF DETAIL (LOD) CLUSTERING ---
+            # --- LEVEL OF DETAIL (LOD) CLUSTERING ---
             detailed_radius = agent_fovea_radii[i] * detailed_clustering_radius_factor
             
             unclusterable_mask = ~clusterable_mask
@@ -1112,7 +1098,7 @@ class BatchedPersistentGraphMemory:
         else:
             return
 
-        # --- HYBRID MERGE (identicial logic, applied per-type) ---
+        # --- HYBRID MERGE (applied per-type) ---
         unique_clusters, inverse_indices = torch.unique(cluster_assignment, return_inverse=True)
         num_clusters_before_merge = unique_clusters.shape[0]
 
@@ -1141,7 +1127,7 @@ class BatchedPersistentGraphMemory:
             final_roots, new_inverse_indices = torch.unique(parent[inverse_indices], return_inverse=True)
             inverse_indices = new_inverse_indices
         
-        # --- AGGREGATION (identical logic, applied per-type) ---
+        # --- AGGREGATION (applied per-type) ---
         clustered_pos_type = scatter(clusterable_pos_type, inverse_indices, dim=0, reduce='mean')
         clustered_radii_type = scatter(clusterable_radii_type, inverse_indices, dim=0, reduce='mean')
 

@@ -113,25 +113,12 @@ def cluster_nodes_by_voxel(
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Coarsens a set of graph nodes by grouping them into voxels (grid cells) using a JIT-compiled function.
-
+    
     This function takes clouds of nodes (e.g., from an agent's memory) and groups
     nodes that are close to each other into single "super nodes". This is a form
     of graph pooling or downsampling, essential for managing the complexity of
     long-term memory graphs. The properties of the super nodes (position, features)
     are aggregated from the original nodes they contain.
-
-    Args:
-        positions (torch.Tensor): A (N, 2) tensor of original node positions.
-        features (torch.Tensor): A (N, F) tensor of original node features.
-        radii (torch.Tensor): A (N,) tensor of original node physical radii.
-        cluster_cell_size (float): The side length of the square voxels used for clustering.
-
-    Returns:
-        A tuple containing:
-        - super_node_pos (torch.Tensor): (M, 2) positions of the M new super nodes.
-        - super_node_features (torch.Tensor): (M, F+1) features of the super nodes. A "count" feature is added.
-        - super_node_radii (torch.Tensor): (M,) radii of the super nodes.
-        - map_original_to_super (torch.Tensor): (N,) mapping from original node index to its new super node index.
     """
     device = positions.device
     num_original_nodes = positions.shape[0]
@@ -223,10 +210,10 @@ class ActorMapState:
         self.raw_channels = torch.tensor([RAW_CH[raw_key] for raw_key, _ in channel_map], device=self.device, dtype=torch.long)
         self.occ_channels = torch.tensor([OCC_CH[occ_key] for _, occ_key in channel_map], device=self.device, dtype=torch.long)
         
-        # V8 OPTIMIZATION: Cache for downsampled map to avoid expensive pooling every step
+        # Cache for downsampled map to avoid expensive pooling every step
         self._downsampled_cache = None
         self._cache_step = -999
-        self._cache_update_frequency = 1  # Set to 1 for smooth GIF generation (was 5)
+        self._cache_update_frequency = 1
 
     def _world_to_map_coords(self, world_pos: torch.Tensor) -> torch.Tensor:
         """Converts world coordinates to allocentric map cell indices."""
@@ -534,13 +521,13 @@ class ActorMapState:
         """
         start_time = time.time()
         
-        # V7 OPTIMIZATION: Use cached downsampled map if available and recent
+        # Use cached downsampled map if available and recent
         # DISABLED FOR GIF GENERATION - Always regenerate for smooth visualization
         use_cache = False  # (self._downsampled_cache is not None and 
                           #  (current_step - self._cache_step) < self._cache_update_frequency)
         
         if not use_cache:
-            # --- New Age-Based Logic ---
+            # --- Age-Based Logic ---
             # Create a temporary map to hold calculated ages.
             age_map = torch.full_like(self.persistent_map, 1.1)
         
@@ -574,11 +561,11 @@ class ActorMapState:
             explored_time_delta = torch.clamp(float(current_step) - explored_timestamps, min=0)
             explored_normalized_age = torch.clamp(explored_time_delta / max(1.0, recency_normalization_period), 0.0, 1.0)
             valid_explored_mask = explored_timestamps > 0
-            # V2: Use 1.1 to differentiate "never seen" from "seen long ago" (which clamps to 1.0)
+            # Use 1.1 to differentiate "never seen" from "seen long ago" (which clamps to 1.0)
             # This allows the visualization to create a persistent ground layer.
             age_map[OCC_CH['explored']] = torch.where(valid_explored_mask, explored_normalized_age, 1.1)
 
-            # --- V4 REFINED: Create a Coverage Map for Visualization & Policy ---
+            # --- Create a Coverage Map for Visualization & Policy ---
             # Define which channels actually represent the presence of an entity in the world.
             # This avoids including global context channels (like vec_to_hive) in the density calculation.
             presence_channels_keys = [
@@ -596,7 +583,7 @@ class ActorMapState:
                 output_size=(output_size, output_size)
             ).squeeze(0).squeeze(0)
             
-            # --- V2: INTELLIGENT DOWNSAMPLING ---
+            # --- INTELLIGENT DOWNSAMPLING ---
             # Instead of averaging all channels, which washes out small entities, we use
             # min-pooling for age-based channels and max-pooling for presence-based channels.
             downsampled_map = torch.zeros((OCC_CH_COUNT, output_size, output_size), device=self.device, dtype=torch.float32)
@@ -626,29 +613,25 @@ class ActorMapState:
                 ).squeeze(0)
                 downsampled_map[max_pool_indices] = max_pooled_data
             
-            # V7: Cache the downsampled map and coverage map
+            # Cache the downsampled map and coverage map
             self._downsampled_cache = (downsampled_map.clone(), coverage_map.clone())
             self._cache_step = current_step
         else:
-            # V7: Use cached downsampled map
+            # Use cached downsampled map
             downsampled_map, coverage_map = self._downsampled_cache
         
-        #if self.agent_id == 0 and current_step % 100 == 0:
-        #    explored_count_low_res = (downsampled_map[OCC_CH['explored']] < 0.99).sum().item()
-        #    print(f"[MAP DEBUG] Agent {self.agent_id} at step {current_step}: Explored cells in low-res map (< 0.99): {explored_count_low_res}")
-
         # Initialize the final map to be sent to the policy
         final_map = torch.zeros((OCC_CH_COUNT, output_size, output_size), device=self.device, dtype=torch.float32)
 
         # Copy the downsampled data into the final map structure
         final_map[:OCC_CH_COUNT] = downsampled_map
 
-        # --- V4 ADD: Add the coverage map as a new observation channel ---
+        # --- Add the coverage map as a new observation channel ---
         # This gives the policy direct information about the spatial density of entities
         # in each downsampled grid cell, which was previously only used for visualization.
         final_map[OCC_CH['coverage']] = coverage_map
 
-        # --- V5: Also add 'last_seen_self' to the list of presence channels ---
+        # --- Also add 'last_seen_self' to the list of presence channels ---
         presence_channels_keys = [
             'obstacle_presence', 'last_seen_resource', 'last_seen_coop_resource', 'last_seen_hive_ally',
             'last_seen_hive_enemy', 'last_seen_ally', 'last_seen_enemy', 'last_seen_self'
@@ -850,12 +833,12 @@ class RawMapObservationManager (nn.Module):
         
         relative_pos = visible_entity_pos - observer_pos_expanded
         
-        # --- V8: DYNAMIC SCALING REVERT ---
+        # --- DYNAMIC SCALING REVERT ---
         # The world_to_map_scale is now calculated based on the individual agent's obs_radius,
         # making this a truly dynamic scaling operation.
         cell_dim_expanded = world_to_map_scale[agent_indices_flat]
         
-        # --- V8: GAUSSIAN SPLATTING ---
+        # --- GAUSSIAN SPLATTING ---
         # Instead of drawing hard circles, we render a smooth 2D Gaussian for each entity.
         # This preserves sub-pixel information and encodes size in the spread of the Gaussian.
         radii_in_cells = (visible_entity_radii / cell_dim_expanded)
@@ -903,11 +886,7 @@ class RawMapObservationManager (nn.Module):
         dist_sq = kernel_x_flat_valid**2 + kernel_y_flat_valid**2
         gaussian_intensity = torch.exp(-dist_sq / (2 * sigma**2))
 
-        # --- V15: REVERTED - Use Gaussian Splatting for Obstacles ---
-        # The user correctly observed that hard-edged boxes for obstacles "pop in" too suddenly,
-        # depriving the agent of a crucial early warning signal at the edge of its vision.
-        # A soft-edged Gaussian, even if not physically perfect, provides a much better
-        # perceptual experience for the policy, allowing it to react sooner.
+        # --- REVERTED - Use Gaussian Splatting for Obstacles ---
         intensity = gaussian_intensity
         
         # Filter out negligible intensities to save computation in the scatter operation
@@ -926,7 +905,7 @@ class RawMapObservationManager (nn.Module):
         feat_final = visible_entity_feat[valid_entity_indices]
         observer_teams_final = observer_teams_expanded[valid_entity_indices]
 
-        # --- V10 FIX: Move mask creation before usage ---
+        # --- Mask creation before usage ---
         is_agent_mask = (types_final == agent_type)
         observer_ids = observer_feat_batch[:, feat_id_idx]
         observer_ids_expanded_final = observer_ids[agent_indices_flat_final]
@@ -949,13 +928,6 @@ class RawMapObservationManager (nn.Module):
         num_points_to_draw = valid_entity_indices.shape[0]
         map_features = torch.zeros((num_points_to_draw, C), device=device, dtype=torch.float32)
 
-        # Robustly paint Gaussian intensities onto the correct channels
-        # This is more explicit and JIT-friendly than the previous scatter_add approach.
-        # We need to map our flat indices (which are for the N points) into the B*C*H*W flattened space
-        
-        # Calculate indices into the 'map_features' tensor (N, C)
-        # We need to scatter 'intensity' into map_features at the correct column indices.
-        # But wait, map_features is already (N, C). We can just direct assign.
         
         map_features[is_self_mask, self_presence_ch] = intensity[is_self_mask]
         map_features[is_ally_mask, ally_presence_ch] = intensity[is_ally_mask]
@@ -966,7 +938,7 @@ class RawMapObservationManager (nn.Module):
         map_features[is_enemy_hive_mask, hive_enemy_p_ch] = intensity[is_enemy_hive_mask]
         map_features[is_obstacle_mask, obstacle_presence_ch] = intensity[is_obstacle_mask]
         
-        # --- NEW: TRACE RENDERING ---
+        # --- TRACE RENDERING ---
         if trace_presence_ch >= 0:
             map_features[is_self_mask, trace_presence_ch] = intensity[is_self_mask]
 

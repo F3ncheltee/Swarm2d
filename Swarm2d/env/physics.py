@@ -68,7 +68,7 @@ class DataManager(nn.Module):
                     float(agent_data.get('slowed_timer', 0) > 0),                  # 14
                     float(agent_id),                             # 15 (this is the agent-specific ID)
                     float(agent_id_to_prev_pickup_map.get(agent_id, 0)), # 16
-                    float(agent_id),                              # 17 <<< ADD: This is the generic entity_unique_id for agents
+                    float(agent_id),                              # 17 This is the generic entity_unique_id for agents
                     1.0 if agent_data.get('is_grappling', False) else 0.0, # 18
                     1.0 if agent_data.get('is_grappled', False) else 0.0,   # 19
                     agent_data.get('grapple_momentum_bonus', 0.0),      # 20
@@ -87,7 +87,7 @@ class DataManager(nn.Module):
                     res_data.get('size', 1.0),                    # 3
                     float(res_data.get('cooperative', False)),    # 4
                     float(res_data.get('delivered', False)),      # 5
-                    float(res_data.get('id', -1)),                 # 6 <<< ADD: resource unique ID
+                    float(res_data.get('id', -1)),                 # 6 resource unique ID
                     float(res_data.get('body_id', -1))              # 7
                 ]
                 res_props_list.append(props)
@@ -103,7 +103,7 @@ class DataManager(nn.Module):
                     hive_data.get('owner', team_h_id),            # 4
                     hive_data.get('food_store', 0.0),             # 5
                     float(hive_data.get('state', 'active') == 'destroyed'), # 6
-                    float(hive_data.get('id', -1)),                # 7 <<< ADD: hive unique ID
+                    float(hive_data.get('id', -1)),                # 7 hive unique ID
                     float(hive_data.get('body_id', -1))             # 8
                 ]
                 hive_props_list.append(props)
@@ -115,7 +115,7 @@ class DataManager(nn.Module):
                 props = [
                     *obs_data.get('pos', np.zeros(2)),            # 0, 1
                     obs_data.get('radius', OBSTACLE_RADIUS_MIN),  # 2
-                    float(obs_data.get('id', -1)),                 # 3 <<< ADD: obstacle unique ID
+                    float(obs_data.get('id', -1)),                 # 3 obstacle unique ID
                     float(obs_data.get('body_id', -1))              # 4
                 ]
                 obs_props_list.append(props)
@@ -229,9 +229,9 @@ class DataManager(nn.Module):
         all_teams_t = torch.cat([agent_teams, res_teams, hive_teams, obs_teams], dim=0)
         all_feat_t[:, node_feat_map['team_id']] = all_teams_t.float()
         
-        # --- Unique Entity IDs (NEW) ---
+        # --- Unique Entity IDs ---
         agent_unique_ids = agent_props_t[:, 17]
-        # --- NEW GRAPPLE FEATURES ---
+        # --- GRAPPLE FEATURES ---
         agent_is_grappling = agent_props_t[:, 18]
         agent_is_grappled = agent_props_t[:, 19]
         agent_momentum_bonus = agent_props_t[:, 20]
@@ -243,7 +243,7 @@ class DataManager(nn.Module):
         all_unique_ids_t = torch.cat([agent_unique_ids, res_unique_ids, hive_unique_ids, obs_unique_ids], dim=0)
         all_feat_t[:, node_feat_map['agent_id']] = all_unique_ids_t
         
-        # --- Body IDs (NEW) ---
+        # --- Body IDs ---
         agent_body_ids = agent_props_t[:, 22]
         res_body_ids = res_props_t[:, 7] if res_props_t.numel() > 0 else torch.empty(0, device=device)
         hive_body_ids = hive_props_t[:, 8] if hive_props_t.numel() > 0 else torch.empty(0, device=device)
@@ -283,7 +283,7 @@ class DataManager(nn.Module):
             # value_or_size_norm is product of normalized values, so should stay in [0, 1]
             all_feat_t[start:end, node_feat_map['value_or_size_norm']] = all_feat_t[start:end, node_feat_map['health_norm']] * all_feat_t[start:end, node_feat_map['strength_norm']]
             
-            # --- NEW GRAPPLE FEATURES ---
+            # --- GRAPPLE FEATURES ---
             all_feat_t[start:end, node_feat_map['is_grappling']] = agent_is_grappling
             all_feat_t[start:end, node_feat_map['is_grappled']] = agent_is_grappled
         
@@ -306,7 +306,6 @@ class DataManager(nn.Module):
 
     def _vectorized_proximity_search(self) -> Dict:
         """
-        (V2 - Optimized with PyBullet Broadphase)
         Builds neighbor lists and mappings needed by interactions and combat.
         Uses pybullet.getOverlappingObjects to replace expensive Python loops,
         providing a significant performance increase.
@@ -662,7 +661,7 @@ class CombatManager (nn.Module):
                 # 3. Calculate all damages in one batched call
                 damages_per_pair_t = self._calculate_combat_damage_batched(
                     attacker_props_t, defender_props_t,
-                    # --- ADDED: Pass all required global constants ---
+                    # --- Pass all required global constants ---
                     float(AGENT_RADIUS), float(AGENT_BASE_DAMAGE), float(AGENT_STRENGTH_DAMAGE_MOD),
                     float(AGENT_ENERGY_DAMAGE_MOD), float(AGENT_SIZE_DAMAGE_MOD), float(MIN_AGENT_VELOCITY_FOR_DIRECTION),
                     float(ATTACKER_STATIONARY_DAMAGE_MULTIPLIER), float(ATTACKER_FACING_THRESHOLD),
@@ -707,7 +706,7 @@ class CombatManager (nn.Module):
                     if damages_per_pair_t[i] > 0:
                         potential_killers_map[def_indices_env[i].item()].add(att_indices_env[i].item())
 
-        # --- NEW: Add Grapple Crush Damage ---
+        # --- Grapple Crush Damage ---
         for agent_idx, agent in enumerate(self.agents):
             if agent and agent.get('is_grappling'):
                 target_idx = agent.get('grappled_agent_id')
@@ -733,13 +732,13 @@ class CombatManager (nn.Module):
                     potential_killers_map[target_idx].add(agent_idx)
                     infos['damage_by_team'][agent['team']] += crush_damage
         
-        # --- NEW: Add Grapple Struggle Damage (from target to grappler) ---
+        # --- Grapple Struggle Damage (from target to grappler) ---
         grappler_map = {a.get('grappled_agent_id'): a for a in self.agents if a and a.get('is_grappling')}
         for agent_idx, agent in enumerate(self.agents):
             if agent and agent.get('is_grappled'):
                 grappler_obj = grappler_map.get(agent_idx)
                 if grappler_obj and grappler_obj.get('alive'):
-                    # --- NEW: Refined Struggle Damage with Counter-Play ---
+                    # --- Refined Struggle Damage with Counter-Play ---
                     # The target must be actively trying to move to deal damage.
                     target_vel_norm = np.linalg.norm(agent.get('vel', np.zeros(2)))
                     
@@ -813,7 +812,7 @@ class StatusManager (nn.Module):
 
     def _get_grip_strength_components(self, agent: Dict) -> Dict[str, float]:
         """
-        (V2) Returns a detailed breakdown of all components contributing to grip strength.
+        Returns a detailed breakdown of all components contributing to grip strength.
         This is the definitive calculation, including fatigue and torque penalties.
         """
         components = {
@@ -835,7 +834,7 @@ class StatusManager (nn.Module):
         components['strength_factor'] = agent.get('strength', 1.0)
 
         health_ratio = np.clip(agent.get('health', 0.0) / agent.get('max_health', 1.0), 0.0, 1.0)
-        components['health_factor'] = 0.1 + 0.9 * health_ratio # MODIFIED: Grip drops off more sharply with health
+        components['health_factor'] = 0.1 + 0.9 * health_ratio # Grip drops off more sharply with health
 
         # 3. Penalties from the struggle itself
         if agent.get('is_grappling'):
@@ -1147,8 +1146,8 @@ class AttachmentManager (nn.Module):
     
     def _cleanup_agent_attachments(self, agent: Dict):
         """
-        (V3 - Per-Agent Constraint Cleanup) Unified cleanup for an agent releasing
-        a resource OR a grapple. Handles individual constraints for each carrier.
+        Unified cleanup for an agent releasing a resource OR a grapple.
+        Handles individual constraints for each carrier.
         """
         # --- Release a carried resource ---
         if agent.get("has_resource") and (res_obj := agent.get("resource_obj")):
@@ -1255,7 +1254,7 @@ class AttachmentManager (nn.Module):
 
         # Decide which object to interact with based on proximity
         if closest_res and (not closest_enemy or min_res_dist_sq <= min_enemy_dist_sq):
-            # FIXED REWARD LOGIC: Moved reward calculation logic INTO _attach_resource_to_agent 
+            # Moved reward calculation logic INTO _attach_resource_to_agent 
             # to ensure it happens exactly when the constraint is created.
             if self.env.debug_mode:
                 print(f"[ENV DEBUG] Agent {agent['id']} chose to PICKUP closest resource {closest_res['id']} (dist^2: {min_res_dist_sq:.2f}).")
@@ -1493,7 +1492,7 @@ class MovementManager (nn.Module):
             
             slowed_multiplier = AGENT_SLOWED_FACTOR if agent.get('slowed_timer', 0) > 0 else 1.0
             
-            # --- NEW: Grapple Penalty ---
+            # --- Grapple Penalty ---
             # Reduce movement force significantly if grappling or grappled.
             # This makes the grapple constraint the dominant force.
             grapple_multiplier = 0.1 if agent.get('is_grappling') or agent.get('is_grappled') else 1.0
@@ -1519,7 +1518,7 @@ class MovementManager (nn.Module):
             
             force_vector = mov_vec * force_magnitude
             
-            # --- NEW: Torque Calculation ---
+            # --- Torque Calculation ---
             # If grappling, calculate torque generated by movement force relative to the target.
             # Torque = (Pos_Self - Pos_Target) x Force_Vector
             agent['applied_torque'] = 0.0 # Reset
@@ -1559,7 +1558,7 @@ class HiveCombatManager (nn.Module):
 
     def process_hive_engagements(self, rewards: List[Dict[str, float]], agent_hive_pairs: torch.Tensor, gnn_idx_to_hive_obj_map: Dict[int, Dict], infos: Dict):
         """
-        (V4 - Refactored for Robustness) Resolves hive engagements using a pre-computed list of
+        Resolves hive engagements using a pre-computed list of
         proximate agent-hive pairs and a robust mapping from GNN node index to hive objects.
         """
         if agent_hive_pairs.numel() == 0:

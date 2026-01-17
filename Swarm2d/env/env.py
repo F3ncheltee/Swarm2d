@@ -128,14 +128,14 @@ class Swarm2DEnv(gym.Env):
     def __init__(self,
                  num_teams: int = 6,
                  num_agents_per_team: Union[int, List[int]] = 10,
-                 # --- New overridable agent base parameters ---
+                 # --- Agent base parameters ---
                  agent_radius: float = AGENT_RADIUS,
                  agent_base_strength: float = AGENT_BASE_STRENGTH,
                  agent_max_energy: float = AGENT_MAX_ENERGY,
                  agent_max_health: float = AGENT_MAX_HEALTH,
                  sensing_range_fraction: float = SENSING_RANGE_FRACTION,
                  recency_normalization_period: float = 250.0,
-                 # --- End new parameters ---
+                 # -----------------------------
                  num_resources: int = 350, # Using NUM_RESOURCES from global if not passed
                  num_obstacles: int = 25,  # Using NUM_OBSTACLES from global
                  max_steps: Optional[int] = None,     # Allow setting max_steps from caller
@@ -143,10 +143,10 @@ class Swarm2DEnv(gym.Env):
                  height: int = 1000,       # Using HEIGHT from global
                  render_mode: bool = False,
                  debug: bool = False,
-                 agent_force_scale: float = 1.0, # DEFAULT_AGENT_FORCE_SCALE (legacy, kept for compatibility)
-                 movement_force_scale: float = 15.0, # New preferred param
-                 resource_interaction_force_scale: float = 1.2, # New: For resource carrying grip
-                 agent_interaction_force_scale: float = 0.35, # New: For agent grappling grip
+                 agent_force_scale: float = 1.0, # Legacy param, kept for compatibility
+                 movement_force_scale: float = 15.0, # Preferred param
+                 resource_interaction_force_scale: float = 1.2, # For resource carrying grip
+                 agent_interaction_force_scale: float = 0.35, # For agent grappling grip
                  resource_push_force_scale: float = 0.0, # DEFAULT_RESOURCE_PUSH_FORCE_SCALE
                  resource_base_mass: float = 0.075, # DEFAULT_RESOURCE_BASE_MASS
                  resource_mass_scale_factor: float = 1.4, # DEFAULT_RESOURCE_MASS_SCALE
@@ -154,8 +154,8 @@ class Swarm2DEnv(gym.Env):
                  pb_agent_lateral_friction: float = 0.5,
                  pb_agent_linear_damping: float = 0.11,
                  pb_agent_angular_damping: float = 0.4,
-                 pb_agent_spinning_friction: float = 0.03, # New
-                 pb_agent_rolling_friction: float = 0.01, # New
+                 pb_agent_spinning_friction: float = 0.03,
+                 pb_agent_rolling_friction: float = 0.01,
                  pb_agent_restitution: float = 0.5,
                  pb_res_friction_static: float = 0.35,
                  pb_res_friction_dynamic: float = 0.25,
@@ -163,9 +163,9 @@ class Swarm2DEnv(gym.Env):
                  pb_res_damping_dynamic: float = 0.25,
                  pb_res_restitution: float = 0.4,
                  pb_constraint_max_force: float = 500.0, # Kept for backward compatibility, but unused if new ones are set
-                 pb_resource_constraint_max_force: float = 3000, # New, specific for resources
-                 pb_coop_resource_constraint_max_force: float = 10000, # New, specific for coop resources
-                 pb_agent_constraint_max_force: float = 13000, # New, specific for grappling
+                 pb_resource_constraint_max_force: float = 3000, # Specific for resources
+                 pb_coop_resource_constraint_max_force: float = 10000, # Specific for coop resources
+                 pb_agent_constraint_max_force: float = 13000, # Specific for grappling
                  bee_speed: float = 200, # Agent speed
                  node_feature_dim: int = 22, # NODE_FEATURE_DIM
                  raw_ch_count: int = RAW_CH_COUNT,     # Defaults to RAW_CH_COUNT (8) from constants
@@ -183,18 +183,18 @@ class Swarm2DEnv(gym.Env):
                  los_grid_cell_size_env: float = LOS_GRID_CELL_SIZE,
                 # --- Parameters for Foveated Graph Generation (to be passed to Obs Manager) ---
                  mid_periphery_scale: float = 2.5,
-                 grapple_momentum_bonus_scale: float = 0.1, # New
-                 grapple_torque_scale: float = 25.0, # New
-                 grapple_momentum_decay: float = 0.95, # New
-                 grapple_fatigue_rate: float = 0.01, # New: How fast grip strength decays from holding on
-                 grapple_crush_damage_rate: float = 0.05, # New: Passive damage per step while grappling someone
-                 grapple_torque_escape_strength: float = 0.5, # New: How much counter-torque helps break a grapple
-                 grapple_crit_chance: float = 0.05, # New: Chance for a grapple tick to be a critical hit
-                 grapple_crit_multiplier: float = 3.0, # New: Damage multiplier for a critical hit
-                 grapple_struggle_damage_rate: float = 0.2, # New: Damage the target deals back to the grappler
-                 grapple_rear_crit_bonus_multiplier: float = 3.0, # New: Multiplier for crit chance from behind
-                 grappled_agent_counter_grip_scale: float = 0.5, # New: How much grip strength is gained from counter-grappling
-                 debug_mode: bool = False, # New flag to control verbose logging
+                 grapple_momentum_bonus_scale: float = 0.1,
+                 grapple_torque_scale: float = 25.0,
+                 grapple_momentum_decay: float = 0.95,
+                 grapple_fatigue_rate: float = 0.01, # How fast grip strength decays from holding on
+                 grapple_crush_damage_rate: float = 0.05, # Passive damage per step while grappling someone
+                 grapple_torque_escape_strength: float = 0.5, # How much counter-torque helps break a grapple
+                 grapple_crit_chance: float = 0.05, # Chance for a grapple tick to be a critical hit
+                 grapple_crit_multiplier: float = 3.0, # Damage multiplier for a critical hit
+                 grapple_struggle_damage_rate: float = 0.2, # Damage the target deals back to the grappler
+                 grapple_rear_crit_bonus_multiplier: float = 3.0, # Multiplier for crit chance from behind
+                 grappled_agent_counter_grip_scale: float = 0.5, # How much grip strength is gained from counter-grappling
+                 debug_mode: bool = False, # Flag to control verbose logging
                  agent_randomization_factors: Optional[Dict] = None,
                  team_parameter_overrides: Optional[Dict] = None,
                  enable_profiling: bool = False,
@@ -307,9 +307,9 @@ class Swarm2DEnv(gym.Env):
         self.team_configs = team_configs
         self.generate_memory_map = generate_memory_map
         self.generate_memory_graph = generate_memory_graph
-        self.single_agent_obs_idx = None # New attribute
+        self.single_agent_obs_idx = None
         
-        # --- Store New Overridable Parameters ---
+        # --- Store Overridable Parameters ---
         self.agent_radius_config = agent_radius
         self.agent_base_strength_config = agent_base_strength
         self.agent_max_energy_config = agent_max_energy
@@ -470,7 +470,7 @@ class Swarm2DEnv(gym.Env):
         self.max_cluster_size = max_cluster_size
         self.cluster_exclusion_radius_factor = cluster_exclusion_radius_factor
         self.detailed_clustering_radius_factor = detailed_clustering_radius_factor
-        # --- NEW: Store Hybrid Clustering Parameter ---
+        # --- Store Hybrid Clustering Parameter ---
         self.cluster_merge_threshold = CLUSTER_MERGE_THRESHOLD
 
 
@@ -478,7 +478,7 @@ class Swarm2DEnv(gym.Env):
         self.agent_randomization_factors = agent_randomization_factors if agent_randomization_factors is not None else {}
         self.team_parameter_overrides = team_parameter_overrides
    
-        # --- NEW: Store Graph Generation Parameter ---
+        # --- Store Graph Generation Parameter ---
         self.graph_connection_radius_factor = graph_connection_radius_factor
 
         # --- Initialize Environment Components ---

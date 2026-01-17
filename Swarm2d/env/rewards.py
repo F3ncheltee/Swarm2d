@@ -159,7 +159,7 @@ class RewardManager (nn.Module):
                         # progress is negative, so we use abs() to keep the magnitude, but apply it to the negative reward key
                         base_reward_val = REWARD_CONFIG['r_progress_negative']['default_value']
                         
-                        # Fix: Ensure this is NEGATIVE. 
+                        # Ensure this is NEGATIVE. 
                         # 'progress' is negative. 'base_reward_val' (50.0) is positive.
                         # 'dynamic_base' will be negative (e.g., -0.01 * 50.0 = -0.5).
                         dynamic_base = progress * base_reward_val 
@@ -168,8 +168,6 @@ class RewardManager (nn.Module):
                         for c in carriers:
                             # Pass to get_reward. 
                             # If multiplier is POSITIVE (0.1), then final_reward is NEGATIVE.
-                            # If we configured multiplier as NEGATIVE in simple_rl_training_MAP_ONLY.py, we might double flip?
-                            # Let's check get_reward. Usually it just multiplies.
                             final_reward = self.get_reward(c['team'], "r_progress_negative", reward_per_agent)
                             rewards[c['id']]["r_progress_negative"] += final_reward
 
@@ -181,14 +179,13 @@ class RewardManager (nn.Module):
                     # Base reward now considers size and cooperation
                     coop_bonus = self.get_reward(carriers[0]['team'], 'coop_collection_bonus', REWARD_CONFIG['coop_collection_bonus']['default_value'])
                     base_delivery_reward = REWARD_CONFIG['r_delivery']['default_value']
-                    # FIXED: Don't multiply by base value twice. base_delivery_reward is the base value.
+                    # Don't multiply by base value twice. base_delivery_reward is the base value.
                     dynamic_base = (base_delivery_reward * res.get("size", 1.0) * (coop_bonus if res.get("cooperative") else 1.0))
                     
                     reward_per_agent = dynamic_base / len(carriers)
                     for c in carriers:
-                        # FIXED: Use 1.0 as base for get_reward because we calculated the full amount in dynamic_base
+                        # Use 1.0 as base for get_reward because we calculated the full amount in dynamic_base
                         # If we pass reward_per_agent as base, get_reward multiplies it by the multiplier AGAIN.
-                        # Since we set the multiplier to 50.0 in the training script, we were getting 50 * 50 = 2500x bonus.
                         final_reward = reward_per_agent * self.env.reward_manager.team_reward_multipliers.get(str(c['team']), {}).get('r_delivery', 1.0)
                         rewards[c['id']]["r_delivery"] += final_reward
                         self.env.physics_manager._cleanup_agent_attachments(self.env.agents[c['id']])
@@ -201,7 +198,7 @@ class RewardManager (nn.Module):
 
     def _process_discovery_and_misc_rewards(self, rewards: List[Dict], proximity_data: Dict = None):
         """
-        (V2 - OPTIMIZED) Handles exploration, discovery of entities, and continuous grapple-related rewards.
+        Handles exploration, discovery of entities, and continuous grapple-related rewards.
         
         Now uses pre-computed proximity data from _vectorized_proximity_search() to avoid 
         recalculating O(n²) distance checks. This provides a massive performance improvement.
@@ -269,7 +266,7 @@ class RewardManager (nn.Module):
                             rewards[idx]["r_obstacle_found"] += final_reward
 
                 # --- 4. Enemy Agent Discovery (OPTIMIZED: Use pre-computed proximity) ---
-                # This is the BIGGEST win - eliminates the O(n²) agent-to-agent loop!
+                # This eliminates the O(n²) agent-to-agent loop!
                 nearby_enemies = agent_enemy_map.get(idx, [])
                 for enemy_agent in nearby_enemies:
                     if enemy_agent and enemy_agent.get('alive'):
